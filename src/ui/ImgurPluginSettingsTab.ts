@@ -71,10 +71,24 @@ export default class ImgurPluginSettingsTab extends PluginSettingTab {
 
     new Setting(containerEl).setName('Confirm before upload').addToggle((t) => {
       t.setValue(this.plugin.settings.showRemoteUploadConfirmation)
-      t.onChange((newValue) => {
+      t.onChange(async (newValue) => {
         this.plugin.settings.showRemoteUploadConfirmation = newValue
+        await this.plugin.saveSettings()
       })
     })
+
+    new Setting(containerEl)
+      .setName('Paste URL onto selection')
+      .setDesc(
+        'When enabled, allows pasting URLs onto selected text. When disabled, selected text will be preserved.',
+      )
+      .addToggle((t) => {
+        t.setValue(this.plugin.settings.pasteUrlOntoSelection)
+        t.onChange(async (newValue) => {
+          this.plugin.settings.pasteUrlOntoSelection = newValue
+          await this.plugin.saveSettings()
+        })
+      })
   }
 
   hide() {

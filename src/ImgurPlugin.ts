@@ -1,5 +1,4 @@
 import {
-  CanvasView,
   Editor,
   EditorPosition,
   MarkdownFileInfo,
@@ -8,16 +7,18 @@ import {
   Notice,
   Plugin,
   ReferenceCache,
+  TextFileView,
   TFile,
 } from 'obsidian'
 
 import { createImgurCanvasPasteHandler } from './Canvas'
-import UploadStrategy from './UploadStrategy'
 import DragEventCopy from './aux-event-classes/DragEventCopy'
 import PasteEventCopy from './aux-event-classes/PasteEventCopy'
+import UrlIntoSelection from './core'
 import AuthenticatedImgurClient from './imgur/AuthenticatedImgurClient'
 import ImgurSize from './imgur/resizing/ImgurSize'
 import editorCheckCallbackFor from './imgur/resizing/plugin-callback'
+import { DEFAULT_SETTINGS, ImgurPluginSettings } from './setting'
 import ImgurPluginSettingsTab from './ui/ImgurPluginSettingsTab'
 import InfoModal from './ui/InfoModal'
 import RemoteUploadConfirmationDialog from './ui/RemoteUploadConfirmationDialog'
@@ -57,20 +58,6 @@ interface ClipboardManager {
   handleDrop(e: DragEvent): void
 }
 
-export interface ImgurPluginSettings {
-  uploadStrategy: string
-  clientId: string
-  showRemoteUploadConfirmation: boolean
-  albumToUpload: string | undefined
-}
-
-const DEFAULT_SETTINGS: ImgurPluginSettings = {
-  uploadStrategy: UploadStrategy.ANONYMOUS_IMGUR.id,
-  clientId: null,
-  showRemoteUploadConfirmation: true,
-  albumToUpload: undefined,
-}
-
 interface LocalImageInEditor {
   image: {
     file: TFile
@@ -79,6 +66,10 @@ interface LocalImageInEditor {
   }
   editor: Editor
   noteFile: TFile
+}
+
+type CanvasView = TextFileView & {
+  handlePaste: (e: ClipboardEvent) => Promise<void>
 }
 
 export default class ImgurPlugin extends Plugin {
@@ -92,11 +83,30 @@ export default class ImgurPlugin extends Plugin {
 
   private customPasteEventCallback = async (
     e: ClipboardEvent,
-    _: Editor,
+    editor: Editor,
     markdownView: MarkdownView,
   ) => {
     if (e instanceof PasteEventCopy) return
 
+    console.log('Paste event:', {
+      hasItems: !!e.clipboardData?.items,
+      text: e.clipboardData?.getData('text'),
+      types: e.clipboardData?.types,
+    })
+
+    // First try handling as URL paste
+    const clipboardText = e.clipboardData?.getData('text')
+    if (clipboardText) {
+      console.log('Attempting URL paste with:', clipboardText)
+      const handled = UrlIntoSelection(editor, e, this.settings)
+      if (handled) {
+        console.log('URL paste handled successfully')
+        return
+      }
+      console.log('URL paste not handled')
+    }
+
+    // If not handled as URL, try handling as image
     if (!this.imgUploader) {
       ImgurPlugin.showUnconfiguredPluginNotice()
       return
@@ -130,8 +140,11 @@ export default class ImgurPlugin extends Plugin {
       }
     }
 
+    const selectedText = editor.getSelection().trim()
+    console.log('Selected text before image upload:', selectedText)
+
     for (const file of files) {
-      this.uploadFileAndEmbedImgurImage(file).catch(() => {
+      this.uploadFileAndEmbedImgurImage(file, undefined, selectedText).catch(() => {
         markdownView.currentMode.clipboardManager.handlePaste(new PasteEventCopy(e))
       })
     }
@@ -382,7 +395,8 @@ export default class ImgurPlugin extends Plugin {
         const view = leaf.view
 
         if (view.getViewType() === 'canvas') {
-          this.overridePasteHandlerForCanvasView(view as CanvasView)
+          const canvasView = view as unknown as CanvasView
+          this.overridePasteHandlerForCanvasView(canvasView)
         }
       }),
     )
@@ -439,7 +453,11 @@ export default class ImgurPlugin extends Plugin {
     new Notice('⚠️ Please configure Client ID for Imgur plugin or disable it', fiveSecondsMillis)
   }
 
-  private async uploadFileAndEmbedImgurImage(file: File, atPos?: EditorPosition) {
+  private async uploadFileAndEmbedImgurImage(
+    file: File,
+    atPos?: EditorPosition,
+    selectedText?: string,
+  ) {
     const pasteId = (Math.random() + 1).toString(36).substring(2, 7)
     this.insertTemporaryText(pasteId, atPos)
 
@@ -458,7 +476,7 @@ export default class ImgurPlugin extends Plugin {
       }
       throw e
     }
-    this.embedMarkDownImage(pasteId, imgUrl)
+    this.embedMarkDownImage(pasteId, imgUrl, selectedText)
     return imgUrl
   }
 
@@ -477,9 +495,10 @@ export default class ImgurPlugin extends Plugin {
     return `![Uploading file...${id}]()`
   }
 
-  private embedMarkDownImage(pasteId: string, imageUrl: string) {
+  private embedMarkDownImage(pasteId: string, imageUrl: string, selectedText?: string) {
     const progressText = ImgurPlugin.progressTextFor(pasteId)
-    const markDownImage = `![](${imageUrl})`
+    const markDownImage = selectedText ? `![${selectedText}](${imageUrl})` : `![](${imageUrl})`
+    console.log('Embedding markdown image:', { progressText, markDownImage, selectedText })
 
     ImgurPlugin.replaceFirstOccurrence(this.getEditor(), progressText, markDownImage)
   }

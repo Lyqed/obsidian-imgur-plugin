@@ -8,6 +8,7 @@ if you want to view the source, please visit the github repository of this plugi
 
 /** @type {import("esbuild").BuildOptions} */
 export const sharedEsbuildConfig = {
+  minify: false, // Preserve console logs
   banner: {
     js: banner,
   },

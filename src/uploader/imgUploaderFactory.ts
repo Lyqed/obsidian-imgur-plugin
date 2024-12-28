@@ -1,7 +1,7 @@
-import { ImgurPluginSettings } from '../ImgurPlugin'
 import UploadStrategy from '../UploadStrategy'
 import AuthenticatedImgurClient from '../imgur/AuthenticatedImgurClient'
 import { IMGUR_ACCESS_TOKEN_LOCALSTORAGE_KEY } from '../imgur/constants'
+import { ImgurPluginSettings } from '../setting'
 import ImageUploader from './ImageUploader'
 import ImgurAnonymousUploader from './imgur/ImgurAnonymousUploader'
 import ImgurAuthenticatedUploader from './imgur/ImgurAuthenticatedUploader'
