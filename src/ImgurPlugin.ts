@@ -94,11 +94,11 @@ export default class ImgurPlugin extends Plugin {
       types: e.clipboardData?.types,
     })
 
-    // First try handling as URL paste
+    // First try handling as URL paste if we have text
     const clipboardText = e.clipboardData?.getData('text')
     if (clipboardText) {
       console.log('Attempting URL paste with:', clipboardText)
-      const handled = UrlIntoSelection(editor, e, this.settings)
+      const handled = UrlIntoSelection(editor, clipboardText, this.settings)
       if (handled) {
         console.log('URL paste handled successfully')
         return
@@ -118,11 +118,23 @@ export default class ImgurPlugin extends Plugin {
 
     e.preventDefault()
 
+    // Capture selection before showing dialog
+    const selection = editor.getSelection()
+    const selectedText = selection.trim()
+    console.log('Selection details:', {
+      raw: selection,
+      trimmed: selectedText,
+      hasSelection: editor.somethingSelected(),
+      selectionStart: editor.getCursor('from'),
+      selectionEnd: editor.getCursor('to'),
+    })
+
     if (this.settings.showRemoteUploadConfirmation) {
       const modal = new RemoteUploadConfirmationDialog(this.app)
       modal.open()
 
       const userResp = await modal.response()
+      console.log('Dialog response:', userResp)
       switch (userResp.shouldUpload) {
         case undefined:
           return
@@ -133,6 +145,7 @@ export default class ImgurPlugin extends Plugin {
           }
           break
         case false:
+          // Handle local paste with default handler
           markdownView.currentMode.clipboardManager.handlePaste(new PasteEventCopy(e))
           return
         default:
@@ -140,10 +153,12 @@ export default class ImgurPlugin extends Plugin {
       }
     }
 
-    const selectedText = editor.getSelection().trim()
-    console.log('Selected text before image upload:', selectedText)
-
     for (const file of files) {
+      console.log('Processing file:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      })
       this.uploadFileAndEmbedImgurImage(file, undefined, selectedText).catch(() => {
         markdownView.currentMode.clipboardManager.handlePaste(new PasteEventCopy(e))
       })
@@ -497,10 +512,26 @@ export default class ImgurPlugin extends Plugin {
 
   private embedMarkDownImage(pasteId: string, imageUrl: string, selectedText?: string) {
     const progressText = ImgurPlugin.progressTextFor(pasteId)
-    const markDownImage = selectedText ? `![${selectedText}](${imageUrl})` : `![](${imageUrl})`
-    console.log('Embedding markdown image:', { progressText, markDownImage, selectedText })
+    const editor = this.getEditor()
+    const hasSelection = editor.somethingSelected()
 
-    ImgurPlugin.replaceFirstOccurrence(this.getEditor(), progressText, markDownImage)
+    console.log('Embedding details:', {
+      progressText,
+      selectedText,
+      hasSelection,
+      imageUrl,
+    })
+
+    // Use regular link format when there's selected text and pasteUrlOntoSelection is enabled
+    const markDownImage =
+      selectedText && this.settings.pasteUrlOntoSelection
+        ? `[${selectedText}](${imageUrl})`
+        : selectedText
+          ? `![${selectedText}](${imageUrl})`
+          : `![](${imageUrl})`
+    console.log('Generated markdown:', markDownImage)
+
+    ImgurPlugin.replaceFirstOccurrence(editor, progressText, markDownImage)
   }
 
   private handleFailedUpload(pasteId: string, message: string) {

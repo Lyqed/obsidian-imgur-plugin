@@ -20,10 +20,10 @@ export default class RemoteUploadConfirmationDialog extends Modal {
     const buttonsDiv = this.modalEl.createDiv('modal-button-container')
 
     new ButtonComponent(buttonsDiv)
-      .setButtonText('Always upload')
+      .setButtonText('Paste locally')
       .setCta()
       .onClick(() => {
-        this.deferredResolve({ shouldUpload: true, alwaysUpload: true })
+        this.deferredResolve({ shouldUpload: false })
         this.afterUserInput()
       })
 
@@ -35,8 +35,8 @@ export default class RemoteUploadConfirmationDialog extends Modal {
         this.afterUserInput()
       })
 
-    new ButtonComponent(buttonsDiv).setButtonText('Paste locally').onClick(() => {
-      this.deferredResolve({ shouldUpload: false })
+    new ButtonComponent(buttonsDiv).setButtonText('Always upload').onClick(() => {
+      this.deferredResolve({ shouldUpload: true, alwaysUpload: true })
       this.afterUserInput()
     })
   }
